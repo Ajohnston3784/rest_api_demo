@@ -57,3 +57,9 @@ variable "image_tag" {
   type        = string
   default     = "latest"
 }
+
+variable "repository_name" {
+  description = "Name of the ECR repository"
+  type        = string
+  default     = "quotes-api-demo-repo"
+}

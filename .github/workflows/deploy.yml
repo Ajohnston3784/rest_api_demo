@@ -1,6 +1,7 @@
 name: Deploy to AWS
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -12,9 +13,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_REGION: "us-east-2"
       ECR_REPO_NAME: quotes-api-demo-repo
       PROJECT_NAME: quotes-api-demo
+      TF_STATE_BUCKET: "quotes-api-terraform-state"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,41 +36,20 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Log in to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, tag, and push Docker image to ECR
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
-          # Create a timestamp tag for versioning
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-          # Get short SHA of the commit
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          
-          # Build the image
-          docker build -t $ECR_REPO_NAME .
-          
-          # Tag with timestamp, commit SHA, and latest
-          docker tag $ECR_REPO_NAME:latest $ECR_REGISTRY/$ECR_REPO_NAME:$TIMESTAMP-$SHORT_SHA
-          docker tag $ECR_REPO_NAME:latest $ECR_REGISTRY/$ECR_REPO_NAME:latest
-          
-          # Push both tags
-          docker push $ECR_REGISTRY/$ECR_REPO_NAME:$TIMESTAMP-$SHORT_SHA
-          docker push $ECR_REGISTRY/$ECR_REPO_NAME:latest
-          
-          # Set image tag for Terraform
-          echo "TF_VAR_image_tag=$TIMESTAMP-$SHORT_SHA" >> $GITHUB_ENV
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Terraform Init
-        working-directory: ./terraform
-        run: terraform init
+        working-directory: ./terraform/ecs
+        env:
+          TF_BACKEND_BUCKET: ${{ env.TF_STATE_BUCKET }}
+          TF_BACKEND_REGION: ${{ env.AWS_REGION }}
+        run: |
+          terraform init \
+            -backend-config="bucket=$TF_BACKEND_BUCKET" \
+            -backend-config="region=$TF_BACKEND_REGION"
 
       - name: Terraform Apply
-        working-directory: ./terraform
+        working-directory: ./terraform/ecs
         env:
-          TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
         run: terraform apply -auto-approve

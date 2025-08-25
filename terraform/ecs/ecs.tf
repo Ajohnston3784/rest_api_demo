@@ -1,11 +1,7 @@
-# ECR Repository
-resource "aws_ecr_repository" "app" {
-  name = "${var.project_name}-repo"
-  force_delete = true
 
-  image_scanning_configuration {
-    scan_on_push = true
-  }
+# Import existing ECR repository data
+data "aws_ecr_repository" "app" {
+  name = var.repository_name
 }
 
 # ECS Cluster
@@ -13,7 +9,7 @@ resource "aws_ecs_cluster" "main" {
   name = "${var.project_name}-cluster"
 }
 
-# ECS Task Definition
+# Task Definition
 resource "aws_ecs_task_definition" "app" {
   family                   = "${var.project_name}-task"
   requires_compatibilities = ["FARGATE"]
@@ -26,7 +22,7 @@ resource "aws_ecs_task_definition" "app" {
   container_definitions = jsonencode([
     {
       name  = "${var.project_name}-container"
-      image = "${aws_ecr_repository.app.repository_url}:latest"
+      image = "${data.aws_ecr_repository.app.repository_url}:${var.image_tag}"
       
       portMappings = [
         {
