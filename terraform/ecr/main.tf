@@ -1,9 +1,11 @@
 terraform {
   required_version = ">=1.2.0"
   backend "s3" {
-    bucket = "quotes-api-terraform-state"
-    key    = "ecr/terraform.tfstate"
-    region = "us-east-2"
+    bucket         = "quotes-api-terraform-state"
+    key            = "ecr/terraform.tfstate"
+    region         = "us-east-2"
+    encrypt        = true
+    dynamodb_table = "terraform-state-lock"
   }
 
   required_providers {
