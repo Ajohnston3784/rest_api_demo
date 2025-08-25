@@ -2,6 +2,8 @@
 
 A secure, multi-tenant **Quotes API** built with **FastAPI**. This is a demo project intended for portfolio use — showing how to design and secure a real-world style API.
 
+See [AWS Deployment Guide](docs/aws_deployment.md) for instructions on deploying this API to AWS using Terraform and GitHub Actions.
+
 ## API Endpoints
 
 | Method | Endpoint | Description | Role Required |
@@ -71,7 +73,6 @@ curl -X POST http://localhost:8000/v1/quotes \
 - Role-based authorization (e.g., `viewer` vs `manager`)
 - Multi-tenant data isolation
 - Input validation with Pydantic models
-- Postman collection for easy testing
 - Optional FastAPI implementation for local testing
 
 
@@ -80,6 +81,10 @@ curl -X POST http://localhost:8000/v1/quotes \
 - **JWT** for authentication and authorization
 - **pytest** for testing
 - **GitHub Actions** for CI/CD
+- **Terraform** for infrastructure as code
+- **AWS ECS Fargate** for container orchestration
+- **AWS ECR** for container registry
+- **AWS Application Load Balancer** for load balancing
 
 ## Run Locally (FastAPI Edition)
 1. Install dependencies:
@@ -100,6 +105,7 @@ uvicorn fastapi.app.main:app --reload
 4. Visit API documentation:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
+
 3. Generate and save a JWT token (with `scripts/make_jwt_hs256.py`):
 ```bash
 python ./scripts/make_jwt_token_hs256.py > token.txt
@@ -116,3 +122,65 @@ curl -X POST -H "Authorization: Bearer $JWT" -H "x-api-key: $API_KEY" -H "Conten
 -d '{"customer":"Globex","items":[{"sku":"SKU-1","qty":2,"unit_price":99.5}],"currency":"USD"}' \
 $BASE/v1/quotes
 ```
+
+## Accessing the API
+
+This API can be accessed in two ways:
+
+1. **Local Development**: 
+   - URL: `http://localhost:8000`
+   - Use the instructions above in "Run Locally"
+
+2. **AWS Deployment**:
+
+The API is deployed and available for testing at:
+```bash
+export API_URL=<your-actual-alb-dns-name>  # Replace with your actual ALB DNS
+```
+
+To access the API:
+
+1. **Clone this repository**:
+   ```bash
+   git clone https://github.com/Ajohnston3784/rest_api_demo.git
+   cd rest_api_demo
+   ```
+
+2. **Install Python dependencies** (needed for token generation):
+   ```bash
+   pip install python-jose
+   ```
+
+3. **Generate your JWT token**:
+   ```bash
+   # Edit the tenant_id in scripts/make_jwt_token_hs256.py
+   # Change this line:
+   #   "tenant_id": "tenant-1"
+   # to your unique tenant ID, e.g.:
+   #   "tenant_id": "your-name"
+
+   python ./scripts/make_jwt_token_hs256.py > token.txt
+   export JWT=$(cat token.txt)
+   ```
+
+4. **Test the API**:
+   ```bash
+   # List quotes (viewer role)
+   curl -H "Authorization: Bearer $JWT" http://$API_URL/v1/quotes
+
+   # Create a quote (manager role)
+   curl -X POST http://$API_URL/v1/quotes \
+     -H "Authorization: Bearer $JWT" \
+     -H "Content-Type: application/json" \
+     -d '{"customer":"Test Corp","items":[{"sku":"TEST-1","qty":1,"unit_price":100.00}],"currency":"USD"}'
+   ```
+
+5. **View API Documentation**:
+   - Swagger UI: `http://$API_URL/docs`
+   - ReDoc: `http://$API_URL/redoc`
+
+**Important Notes**:
+- It's recommended that each user uses their own unique `tenant_id` (can be anything)
+- The JWT token includes your tenant ID and roles (viewer/manager)
+- Tokens expire after 24 hours - generate a new one if needed
+- Keep your tenant ID simple (letters, numbers, hyphens only)

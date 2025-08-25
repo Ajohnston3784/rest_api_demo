@@ -1,0 +1,74 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - 'Dockerfile'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      ECR_REPO_NAME: quotes-api-demo-repo
+      PROJECT_NAME: quotes-api-demo
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push Docker image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          # Create a timestamp tag for versioning
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          # Get short SHA of the commit
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          
+          # Build the image
+          docker build -t $ECR_REPO_NAME .
+          
+          # Tag with timestamp, commit SHA, and latest
+          docker tag $ECR_REPO_NAME:latest $ECR_REGISTRY/$ECR_REPO_NAME:$TIMESTAMP-$SHORT_SHA
+          docker tag $ECR_REPO_NAME:latest $ECR_REGISTRY/$ECR_REPO_NAME:latest
+          
+          # Push both tags
+          docker push $ECR_REGISTRY/$ECR_REPO_NAME:$TIMESTAMP-$SHORT_SHA
+          docker push $ECR_REGISTRY/$ECR_REPO_NAME:latest
+          
+          # Set image tag for Terraform
+          echo "TF_VAR_image_tag=$TIMESTAMP-$SHORT_SHA" >> $GITHUB_ENV
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: ./terraform
+        env:
+          TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+        run: terraform apply -auto-approve
